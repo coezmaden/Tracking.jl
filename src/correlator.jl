@@ -281,3 +281,154 @@ Base.@propagate_inbounds @inline function correlate_iteration(
     VeryEarlyPromptLateCorrelator(early, prompt, late)
 end
 =#
+
+"""
+$(SIGNATURES)
+
+Correlator bank for `L` correlators. Assumed to be symmetric, only an odd number of correlators can be initialized.
+"""
+struct CorrelatorBank{L, N, T} <: AbstractCorrelator{T}
+    values::MMatrix{L, N, Complex{T}}
+    prompt_index::UInt16
+    max_offset::UInt16
+end
+
+"""
+$(SIGNATURES)
+
+CorrelatorBank constructor with only the `L` input assumes a single antenna
+"""
+function CorrelatorBank(L::Int)
+    iseven(L) ? throw("Number of correlators must be odd") :
+    CorrelatorBank(
+        MMatrix{L, 1}(zeros(ComplexF64, L, 1)), # values vector
+        ceil(UInt16, L/2),                      # prompt index
+        UInt16(abs(L - ceil(UInt16, L/2)))      # max offset
+    )
+end
+
+"""
+$(SIGNATURES)
+
+CorrelatorBank constructor that considers multiple antennas. The number of
+antennas has to be specified by `num_ants::NumAnts{N}` where N is the number of antenna
+elements.
+"""
+function CorrelatorBank(L::Int, num_ants::NumAnts{N}) where N
+    iseven(L) ? throw("Number of correlators must be odd") :
+    CorrelatorBank(
+        MMatrix{L, N}(zeros(ComplexF64, L, N)), # values vector
+        ceil(UInt16, L/2),                      # prompt index
+        UInt16(abs(L - ceil(UInt16, L/2)))      # max offset
+    )
+end
+
+"""
+$(SIGNATURES)
+
+Get correlation values from the correlator
+"""
+get_corr_values(correlator::CorrelatorBank) = correlator.values
+
+
+"""
+$(SIGNATURES)
+
+Get number of antennas from correlator
+"""
+get_num_ants(correlator::CorrelatorBank{L,N,T}) where {L, N, T} = N
+
+"""
+$(SIGNATURES)
+
+Get number of correlators from correlator
+"""
+get_num_correlators(correlator::CorrelatorBank{L,N,T}) where {L, N, T} = L
+
+"""
+$(SIGNATURES)
+
+Get maximum index offset of the `L`-correlator
+"""
+get_max_offset(correlator::CorrelatorBank) = correlator.max_offset
+
+
+"""
+$(SIGNATURES)
+
+Get the earlyⁿ correlator value. No bound checks.
+"""
+@inline get_early_unsafe(correlator::CorrelatorBank, n::Int = 1) = correlator.values[correlator.prompt_index - n,:]
+
+"""
+$(SIGNATURES)
+
+Get the earlyⁿ correlator value. Bound checked.
+"""
+@inline function get_early(correlator::CorrelatorBank, n::Int = 1)
+    if(abs(n) > get_max_offset(correlator))
+        throw("Early^$n is out of bounds")
+    elseif(n < 0)
+        @warn("Used get_early with negative indices. Output is equivalent to get_late(correlator, n)")
+    end
+    correlator.values[correlator.prompt_index - n,:]
+end
+
+"""
+$(SIGNATURES)
+
+Get the prompt correlator
+"""
+@inline get_prompt(correlator::CorrelatorBank) = correlator.values[correlator.prompt_index,:]
+
+"""
+$(SIGNATURES)
+
+Get the lateⁿ correlator. No bound checks.
+"""
+@inline get_late_unsafe(correlator::CorrelatorBank, n::Int = 1) = correlator.values[correlator.prompt_index + n,:]
+
+"""
+$(SIGNATURES)
+
+Get the lateⁿ correlator. Bound checked.
+"""
+@inline function get_late(correlator::CorrelatorBank, n::Int = 1)
+    if(abs(n) > get_max_offset(correlator))
+        throw("Late^$n is out of bounds")
+    elseif(n < 0)
+        @warn("Used get_late with negative indices. Output is equivalent to get_early(correlator, n)")
+    end
+    correlator.values[correlator.prompt_index + n,:]
+end
+
+"""
+$(SIGNATURES)
+
+Reset the correlator
+"""
+function zero(correlator::CorrelatorBank{L,N,T}) where {L, N, T}
+    CorrelatorBank(L,NumAnts(N))
+end
+
+"""
+$(SIGNATURES)
+
+Filter the correlator by the function `post_corr_filter`.
+"""
+function filter(post_corr_filter, correlator::CorrelatorBank{L,N,T}) where {L,N,T}
+    filtered_correlator = CorrelatorBank(L,NumAnts(N))
+    filtered_correlator.values .= post_corr_filter.(get_corr_values(correlator))
+    return filtered_correlator
+end
+
+"""
+$(SIGNATURES)
+
+Normalize the correlator.
+"""
+function normalize(correlator::CorrelatorBank{L,N,T}, integrated_samples) where {L,N,T}
+    normalized_correlator = CorrelatorBank(L,NumAnts(N))
+    normalized_correlator.values .= get_corr_values(correlator) ./ integrated_samples
+    return normalized_correlator
+end

@@ -143,4 +143,8 @@
         @test all(get_prompt(correlator_result) .== 2500)
     end
 
+    @testset "Correlator Bank" begin
+        correlator = @inferred CorrelatorBank()
+    end
+
 end
