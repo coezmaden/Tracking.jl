@@ -358,7 +358,7 @@ $(SIGNATURES)
 
 Get the earlyⁿ correlator value. No bound checks.
 """
-@inline get_early_unsafe(correlator::CorrelatorBank, n::Int = 1) = correlator.values[correlator.prompt_index - n,:]
+@inline get_early_unsafe(correlator::CorrelatorBank, n::Int = 1) = @inbounds correlator.values[correlator.prompt_index - n,:]
 
 """
 $(SIGNATURES)
@@ -405,6 +405,32 @@ end
 """
 $(SIGNATURES)
 
+Set values of the correlator with a single antenna
+"""
+function set_values(new_values::Vector, correlator::CorrelatorBank{L,1,T}) where {L, T}
+    CorrelatorBank(
+        MMatrix{L,1}(new_values),           # values vector
+        ceil(UInt16, L/2),                  # prompt index
+        UInt16(abs(L - ceil(UInt16, L/2)))  # max offset
+    )
+end
+
+"""
+$(SIGNATURES)
+
+Set values of the correlator with multiple antenna
+"""
+function set_values(new_values::Matrix, correlator::CorrelatorBank{L,N,T}) where {L, N, T}
+    CorrelatorBank(
+        MMatrix{L,N}(new_values),           # values vector
+        ceil(UInt16, L/2),                  # prompt index
+        UInt16(abs(L - ceil(UInt16, L/2)))  # max offset
+    )
+end
+
+"""
+$(SIGNATURES)
+
 Reset the correlator
 """
 function zero(correlator::CorrelatorBank{L,N,T}) where {L, N, T}
@@ -431,4 +457,34 @@ function normalize(correlator::CorrelatorBank{L,N,T}, integrated_samples) where 
     normalized_correlator = CorrelatorBank(L,NumAnts(N))
     normalized_correlator.values .= get_corr_values(correlator) ./ integrated_samples
     return normalized_correlator
+end
+
+"""
+$(SIGNATURES)
+
+Perform a correlation.
+"""
+function correlate(
+    correlator::CorrelatorBank{L,N,T},
+    downconverted_signal,
+    code,
+    early_late_sample_shift,
+    start_sample,
+    num_samples_left,
+    agc_attenuation,
+    agc_bits,
+    carrier_bits::Val{NC}
+) where {L, N, T, NC}
+    corr_values = Vector(undef, get_num_correlators(correlator))
+
+    @inbounds for i in 1:get_num_correlators(correlator)
+        @inbounds for n = start_sample:num_samples_left + start_sample - 1 
+            corr_values[i] =  downconverted_signal[n] * code[n+(i-1)*early_late_sample_shift]
+        end
+    end
+
+    return set_values(corr_values,CorrelatorBank(
+        get_num_correlators(correlator),
+        NumAnts(1)
+    ))
 end

@@ -11,6 +11,7 @@ struct TrackingState{
         CN <: AbstractCN0Estimator,
         DS <: StructArray,
     }
+    system::S
     init_carrier_doppler::typeof(1.0Hz)
     init_code_doppler::typeof(1.0Hz)
     carrier_doppler::typeof(1.0Hz)
