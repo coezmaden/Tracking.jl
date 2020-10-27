@@ -328,13 +328,13 @@ function get_num_ants(
     N
 end
 
-@inline get_veryvery_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
-@inline get_very_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
+@inline get_veryvery_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.veryvery_early
+@inline get_very_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.very_early
 @inline get_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
 @inline get_prompt(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.prompt
 @inline get_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
-@inline get_very_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
-@inline get_veryvery_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
+@inline get_very_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.very_late
+@inline get_veryvery_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.veryvery_late
 
 function zero(correlator::VeryVeryEarlyPromptLateCorrelator{T}) where T
     VeryVeryEarlyPromptLateCorrelator(zero(T),zero(T),zero(T), zero(T), zero(T), zero(T), zero(T))
@@ -361,6 +361,70 @@ function normalize(correlator::VeryVeryEarlyPromptLateCorrelator, integrated_sam
         get_late(correlator) / integrated_samples,
         get_very_late(correlator) / integrated_samples,
         get_veryvery_late(correlator) / integrated_samples,
+    )
+end
+
+function get_early_late_sample_shift(
+    ::Type{S},
+    correlator::VeryVeryEarlyPromptLateCorrelator,
+    sampling_frequency,
+    preferred_code_shift
+) where S <: AbstractGNSSSystem
+    round(Int, preferred_code_shift * sampling_frequency / get_code_frequency(S))
+end
+
+"""
+$(SIGNATURES)
+
+Perform a correlation.
+"""
+function correlate(
+    correlator::VeryVeryEarlyPromptLateCorrelator,
+    downconverted_signal,
+    code,
+    early_late_sample_shift,
+    start_sample,
+    num_samples_left,
+    agc_attenuation,
+    agc_bits,
+    carrier_bits::Val{NC}
+) where NC
+    veryvery_late = zero(Complex{Int32})
+    very_late = zero(Complex{Int32})
+    late = zero(Complex{Int32})
+    prompt = zero(Complex{Int32})
+    early = zero(Complex{Int32})
+    very_early = zero(Complex{Int32})
+    veryvery_early = zero(Complex{Int32})
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        veryvery_late = veryvery_late + downconverted_signal[i] * code[i]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        very_late = very_late + downconverted_signal[i] * code[i + early_late_sample_shift]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        late = late + downconverted_signal[i] * code[i + 2 * early_late_sample_shift]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        prompt = prompt + downconverted_signal[i] * code[i + 3 * early_late_sample_shift]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        early = early + downconverted_signal[i] * code[i + 4 * early_late_sample_shift]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        very_early = very_early + downconverted_signal[i] * code[i + 5 * early_late_sample_shift]
+    end
+    @inbounds for i = start_sample:num_samples_left + start_sample - 1
+        veryvery_early = veryvery_early + downconverted_signal[i] * code[i + 6 * early_late_sample_shift]
+    end
+    VeryVeryEarlyPromptLateCorrelator(
+        get_veryvery_early(correlator) + veryvery_early * agc_attenuation / 1 << (agc_bits + NC),
+        get_very_early(correlator) + very_early * agc_attenuation / 1 << (agc_bits + NC),
+        get_early(correlator) + early * agc_attenuation / 1 << (agc_bits + NC),
+        get_prompt(correlator) + prompt * agc_attenuation / 1 << (agc_bits + NC),
+        get_late(correlator) + late * agc_attenuation / 1 << (agc_bits + NC),
+        get_very_late(correlator) + very_late * agc_attenuation / 1 << (agc_bits + NC),
+        get_veryvery_late(correlator) + veryvery_late * agc_attenuation / 1 << (agc_bits + NC)
     )
 end
 
