@@ -282,6 +282,89 @@ Base.@propagate_inbounds @inline function correlate_iteration(
 end
 =#
 
+struct VeryVeryEarlyPromptLateCorrelator{T} <: AbstractCorrelator{T}
+    veryvery_early::T
+    very_early::T
+    early::T
+    prompt::T
+    late::T
+    very_late::T
+    veryvery_late::T
+end
+
+function VeryVeryEarlyPromptLateCorrelator(num_ants::NumAnts{1})
+    VeryVeryEarlyPromptLateCorrelator(
+        zero(Complex{Float64}),
+        zero(Complex{Float64}),
+        zero(Complex{Float64}),
+        zero(Complex{Float64}),
+        zero(Complex{Float64}),
+        zero(Complex{Float64}),
+        zero(Complex{Float64})
+    )
+end
+
+function VeryVeryEarlyPromptLateCorrelator(num_ants::NumAnts{N}) where N
+    VeryVeryEarlyPromptLateCorrelator(
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}}),
+        zero(SVector{N, Complex{Float64}})
+    )
+end
+
+"""
+$(SIGNATURES)
+
+Get number of antennas from correlator
+"""
+get_num_ants(correlator::VeryVeryEarlyPromptLateCorrelator{Complex{T}}) where T = 1
+function get_num_ants(
+    correlator::VeryVeryEarlyPromptLateCorrelator{SVector{N, Complex{T}}}
+) where {N, T}
+    N
+end
+
+@inline get_veryvery_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
+@inline get_very_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
+@inline get_early(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.early
+@inline get_prompt(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.prompt
+@inline get_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
+@inline get_very_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
+@inline get_veryvery_late(correlator::VeryVeryEarlyPromptLateCorrelator) = correlator.late
+
+function zero(correlator::VeryVeryEarlyPromptLateCorrelator{T}) where T
+    VeryVeryEarlyPromptLateCorrelator(zero(T),zero(T),zero(T), zero(T), zero(T), zero(T), zero(T))
+end
+
+function filter(post_corr_filter, correlator::VeryVeryEarlyPromptLateCorrelator)
+    VeryVeryEarlyPromptLateCorrelator(
+        post_corr_filter(get_veryvery_early(correlator)),
+        post_corr_filter(get_very_early(correlator)),
+        post_corr_filter(get_early(correlator)),
+        post_corr_filter(get_prompt(correlator)),
+        post_corr_filter(get_late(correlator)),
+        post_corr_filter(get_very_late(correlator)),
+        post_corr_filter(get_veryvery_late(correlator))
+    )
+end
+
+function normalize(correlator::VeryVeryEarlyPromptLateCorrelator, integrated_samples)
+    VeryVeryEarlyPromptLateCorrelator(
+        get_veryvery_early(correlator) / integrated_samples,
+        get_very_early(correlator) / integrated_samples,
+        get_early(correlator) / integrated_samples,
+        get_prompt(correlator) / integrated_samples,
+        get_late(correlator) / integrated_samples,
+        get_very_late(correlator) / integrated_samples,
+        get_veryvery_late(correlator) / integrated_samples,
+    )
+end
+
+
 """
 $(SIGNATURES)
 
