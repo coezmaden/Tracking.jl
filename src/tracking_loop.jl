@@ -88,7 +88,7 @@ function track(
             intermediate_frequency,
             carrier_doppler
         )
-        code_frequency = get_current_code_frequency(S, code_doppler)
+        code_frequency = 10*get_current_code_frequency(S, code_doppler)
         code_replica = gen_code_replica!(
             code_replica,
             S,
