@@ -454,22 +454,22 @@ function correlate(
         veryvery_late[j] = veryvery_late[j] + downconverted_signal[i,j] * code[i]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        very_late[j] = very_late[j] + downconverted_signal[i,j] * code[i + 1 * early_late_sample_shift]
+        very_late[j] = very_late[j] + downconverted_signal[i,j] * code[i + 1]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        late[j] = late[j] + downconverted_signal[i,j] * code[i + 2 * early_late_sample_shift]
+        late[j] = late[j] + downconverted_signal[i,j] * code[i + 2]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        prompt[j] = prompt[j] + downconverted_signal[i,j] * code[i + 3 * early_late_sample_shift]
+        prompt[j] = prompt[j] + downconverted_signal[i,j] * code[i + 3]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        early[j] = early[j] + downconverted_signal[i,j] * code[i + 4 * early_late_sample_shift]
+        early[j] = early[j] + downconverted_signal[i,j] * code[i + 4]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        very_early[j] = very_early[j] + downconverted_signal[i,j] * code[i + 5 * early_late_sample_shift]
+        very_early[j] = very_early[j] + downconverted_signal[i,j] * code[i + 5]
     end
     @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
-        veryvery_early[j] = veryvery_early[j] + downconverted_signal[i,j] * code[i + 6 * early_late_sample_shift]
+        veryvery_early[j] = veryvery_early[j] + downconverted_signal[i,j] * code[i + 6]
     end
     VeryVeryEarlyPromptLateCorrelator(
         get_veryvery_early(correlator) + veryvery_early .* agc_attenuation / 1 << (agc_bits + NC),
