@@ -370,7 +370,11 @@ function get_early_late_sample_shift(
     sampling_frequency,
     preferred_code_shift
 ) where S <: AbstractGNSSSystem
-    round(Int, preferred_code_shift * sampling_frequency / get_code_frequency(S))
+    shift = Array{Int64}(undef, 3)
+    for i  in 1:3
+        shift[i] = round(Int, i*preferred_code_shift * sampling_frequency / get_code_frequency(S))
+    end
+    shift
 end
 
 """
@@ -428,6 +432,55 @@ function correlate(
     )
 end
 
+function correlate(
+    correlator::VeryVeryEarlyPromptLateCorrelator{<: SVector{N}},
+    downconverted_signal::AbstractMatrix,
+    code,
+    early_late_sample_shift,
+    start_sample,
+    num_samples_left,
+    agc_attenuation,
+    agc_bits,
+    carrier_bits::Val{NC}
+) where {N, NC}
+    veryvery_late = zero(MVector{N, Complex{Int32}})
+    very_late = zero(MVector{N, Complex{Int32}})
+    late = zero(MVector{N, Complex{Int32}})
+    prompt = zero(MVector{N, Complex{Int32}})
+    early = zero(MVector{N, Complex{Int32}})
+    very_early = zero(MVector{N, Complex{Int32}})
+    veryvery_early = zero(MVector{N, Complex{Int32}})
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        veryvery_late[j] = veryvery_late[j] + downconverted_signal[i,j] * code[i]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        very_late[j] = very_late[j] + downconverted_signal[i,j] * code[i + 1 * early_late_sample_shift]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        late[j] = late[j] + downconverted_signal[i,j] * code[i + 2 * early_late_sample_shift]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        prompt[j] = prompt[j] + downconverted_signal[i,j] * code[i + 3 * early_late_sample_shift]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        early[j] = early[j] + downconverted_signal[i,j] * code[i + 4 * early_late_sample_shift]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        very_early[j] = very_early[j] + downconverted_signal[i,j] * code[i + 5 * early_late_sample_shift]
+    end
+    @inbounds for j = 1:length(late), i = start_sample:num_samples_left + start_sample - 1
+        veryvery_early[j] = veryvery_early[j] + downconverted_signal[i,j] * code[i + 6 * early_late_sample_shift]
+    end
+    VeryVeryEarlyPromptLateCorrelator(
+        get_veryvery_early(correlator) + veryvery_early .* agc_attenuation / 1 << (agc_bits + NC),
+        get_very_early(correlator) + very_early .* agc_attenuation / 1 << (agc_bits + NC),
+        get_early(correlator) + early .* agc_attenuation / 1 << (agc_bits + NC),
+        get_prompt(correlator) + prompt .* agc_attenuation / 1 << (agc_bits + NC),
+        get_late(correlator) + late .* agc_attenuation / 1 << (agc_bits + NC),
+        get_very_late(correlator) + very_late .* agc_attenuation / 1 << (agc_bits + NC),
+        get_veryvery_late(correlator) + veryvery_late .* agc_attenuation / 1 << (agc_bits + NC)
+    )
+end
 
 """
 $(SIGNATURES)

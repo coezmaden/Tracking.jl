@@ -96,61 +96,6 @@ function TrackingState(
     )
 end
 
-"""
-$(SIGNATURES)
-Constructor with correlator input
-"""
-function TrackingStateAbsCorr(
-    ::Type{S},
-    carrier_doppler,
-    code_phase,
-    correlator::C;
-    code_doppler = carrier_doppler * get_code_center_frequency_ratio(S),
-    carrier_phase = 0.0,
-    carrier_loop_filter::CALF = ThirdOrderBilinearLF(),
-    code_loop_filter::COLF = SecondOrderBilinearLF(),
-    sc_bit_detector = SecondaryCodeOrBitDetector(),
-    num_ants = NumAnts(1),
-    integrated_samples = 0,
-    prompt_accumulator = zero(ComplexF64),
-    cn0_estimator::CN = MomentsCN0Estimator(20)
-) where {
-    S <: AbstractGNSSSystem,
-    C <: AbstractCorrelator,
-    CALF <: AbstractLoopFilter,
-    COLF <: AbstractLoopFilter,
-    CN <: AbstractCN0Estimator
-}
-    if found(sc_bit_detector)
-        code_phase = mod(code_phase, get_code_length(S) *
-            get_secondary_code_length(S))
-    else
-        code_phase = mod(code_phase, get_code_length(S))
-    end
-    downconverted_signal = init_downconverted_signal(num_ants)
-    carrier = StructArray{Complex{Int16}}(undef, 0)
-    code = Vector{Int16}(undef, 0)
-
-    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal)}(
-        carrier_doppler,
-        code_doppler,
-        carrier_doppler,
-        code_doppler,
-        carrier_phase / 2π,
-        code_phase,
-        correlator,
-        carrier_loop_filter,
-        code_loop_filter,
-        sc_bit_detector,
-        integrated_samples,
-        prompt_accumulator,
-        cn0_estimator,
-        downconverted_signal,
-        carrier,
-        code
-    )
-end
-
 function init_downconverted_signal(num_ants::NumAnts{1})
     StructArray{Complex{Int16}}(undef, 0)
 end
