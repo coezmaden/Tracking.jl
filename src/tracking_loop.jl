@@ -298,14 +298,15 @@ function get_integration_time(
     max_integration_time,
     secondary_code_or_bit_found::Bool
 ) where S <: AbstractGNSSSystem
-    ifelse(
-        secondary_code_or_bit_found,
-        max_integration_time,
-        min(
-            convert(typeof(1ms), get_code_length(S) / get_code_frequency(S)),
-            max_integration_time
-        )
-    )
+    max_integration_time
+    # ifelse(
+    #     secondary_code_or_bit_found,
+    #     max_integration_time,
+    #     min(
+    #         convert(typeof(1ms), get_code_length(S) / get_code_frequency(S)),
+    #         max_integration_time
+    #     )
+    # )
 end
 
 """

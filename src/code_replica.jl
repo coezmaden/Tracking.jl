@@ -23,7 +23,7 @@ function gen_code_replica!(
         fixed_point_code_phase = (i - max_sample_shift - start_sample) * delta +
             fixed_point_start_code_phase
         code_index = fixed_point_code_phase >> fixed_point
-        code_replica[i] = get_code_unsafe(S, code_index, prn)
+        code_replica[i] = GNSSSignals.get_code(S, code_index, prn)
     end
     code_replica
 end
