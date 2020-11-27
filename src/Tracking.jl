@@ -33,6 +33,7 @@ module Tracking
         get_num_bits,
         EarlyPromptLateCorrelator,
         VeryEarlyPromptLateCorrelator,
+        VeryVeryEarlyPromptLateCorrelator,
         SecondaryCodeOrBitDetector,
         GainControlledSignal
 
