@@ -240,7 +240,7 @@ function correlate(
     num_samples_left,
     agc_attenuation,
     agc_bits,
-    carrier_bits,
+    carrier_bits::Val{NC}
 )  where {N, T <: AbstractFloat}
     late = zero(MVector{N, ComplexF32})
     prompt = zero(MVector{N, ComplexF32})

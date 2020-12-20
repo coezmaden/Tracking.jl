@@ -5,7 +5,7 @@ CPU Code replica function
 """
 function gen_code_replica!(
     code_replica,
-    system,
+    ::Type{S},
     code_frequency,
     sampling_frequency,
     start_code_phase::AbstractFloat,
@@ -13,12 +13,12 @@ function gen_code_replica!(
     num_samples::Integer,
     early_late_sample_shift,
     prn::Integer
-)
-    fixed_point = sizeof(Int) * 8 - 1 - min_bits_for_code_length(system)
+) where S <: AbstractGNSSSystem
+    fixed_point = sizeof(Int) * 8 - 1 - min_bits_for_code_length(S)
     delta = floor(Int, code_frequency * 1 << fixed_point / sampling_frequency)
     modded_start_code_phase = mod(
         start_code_phase,
-        get_code_length(system) * get_secondary_code_length(system)
+        get_code_length(S) * get_secondary_code_length(S)
     )
     fixed_point_start_code_phase = floor(Int, modded_start_code_phase * 1 << fixed_point)
     max_sample_shift = maximum(early_late_sample_shift)
@@ -28,7 +28,7 @@ function gen_code_replica!(
         fixed_point_code_phase = (i - max_sample_shift - start_sample) * delta +
             fixed_point_start_code_phase
         code_index = fixed_point_code_phase >> fixed_point
-        code_replica[i] = get_code_unsafe(system, code_index, prn)
+        code_replica[i] = get_code_unsafe(S, code_index, prn)
     end
     code_replica
 end
@@ -40,7 +40,7 @@ GPU Code replica function
 """
 function gen_code_replica!(
     code_replica::CuArray{T},
-    system,
+    system::AbstractGNSSSystem,
     code_frequency,
     sampling_frequency,
     start_code_phase::AbstractFloat,
@@ -61,20 +61,20 @@ $(SIGNATURES)
 Updates the code phase.
 """
 function update_code_phase(
-    system,
+    ::Type{S},
     num_samples,
     code_frequency,
     sampling_frequency,
     start_code_phase,
     secondary_code_or_bit_found
 ) where S <: AbstractGNSSSystem
-    if get_data_frequency(system) == 0Hz
-        secondary_code_or_bit_length = get_secondary_code_length(system)
+    if get_data_frequency(S) == 0Hz
+        secondary_code_or_bit_length = get_secondary_code_length(S)
     else
         secondary_code_or_bit_length =
-            Int(get_code_frequency(system) / (get_data_frequency(system) * get_code_length(system)))
+            Int(get_code_frequency(S) / (get_data_frequency(S) * get_code_length(S)))
     end
-    code_length = get_code_length(system) *
+    code_length = get_code_length(S) *
         (secondary_code_or_bit_found ? secondary_code_or_bit_length : 1)
     mod(code_frequency * num_samples / sampling_frequency + start_code_phase, code_length)
 #    fixed_point = sizeof(Int) * 8 - 1 - min_bits_for_code_length(S)
@@ -89,6 +89,6 @@ $(SIGNATURES)
 
 Calculates the current code frequency.
 """
-function get_current_code_frequency(system, code_doppler)
-    code_doppler + get_code_frequency(system)
+function get_current_code_frequency(::Type{S}, code_doppler) where S <: AbstractGNSSSystem
+    code_doppler + get_code_frequency(S)
 end
