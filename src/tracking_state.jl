@@ -60,7 +60,8 @@ function TrackingState(
     correlator::C = get_default_correlator(S, num_ants),
     integrated_samples = 0,
     prompt_accumulator = zero(ComplexF64),
-    cn0_estimator::CN = MomentsCN0Estimator(20)
+    cn0_estimator::CN = MomentsCN0Estimator(20),
+    cuda = use_gpu[]
 ) where {
     S <: AbstractGNSSSystem,
     C <: AbstractCorrelator,
