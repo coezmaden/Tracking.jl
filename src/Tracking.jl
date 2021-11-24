@@ -10,6 +10,7 @@ module Tracking
 
     using Unitful: upreferred, Hz, dBHz, ms
     import Base.zero, Base.length, Base.resize!, LinearAlgebra.dot  
+    import CUDA.NVTX
 
     export
         get_early,
