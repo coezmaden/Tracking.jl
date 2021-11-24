@@ -79,38 +79,42 @@ function track(
     valid_correlator_carrier_frequency = 0.0Hz
     got_correlator = false
     while true
-        num_samples_left_to_integrate = get_num_samples_left_to_integrate(
+        NVTX.@range "Loop Init" begin
+            num_samples_left_to_integrate = get_num_samples_left_to_integrate(
             system,
             max_integration_time,
             sampling_frequency,
             code_doppler,
             code_phase,
             found(sc_bit_detector)
-        )
-        signal_samples_left = get_num_samples(signal) - signal_start_sample + 1
-        num_samples_left = min(num_samples_left_to_integrate, signal_samples_left)
-        carrier_frequency = get_current_carrier_frequency(
-            intermediate_frequency,
-            carrier_doppler
-        )
-        code_frequency = get_current_code_frequency(system, code_doppler)
-        correlator = downconvert_and_correlate!(
-            system,
-            signal,
-            correlator,
-            code_replica,
-            code_phase,
-            carrier_replica,
-            carrier_phase,
-            downconverted_signal,
-            code_frequency,
-            correlator_sample_shifts,
-            carrier_frequency,
-            sampling_frequency,
-            signal_start_sample,
-            num_samples_left,
-            prn
-        )
+            )
+            signal_samples_left = get_num_samples(signal) - signal_start_sample + 1
+            num_samples_left = min(num_samples_left_to_integrate, signal_samples_left)
+            carrier_frequency = get_current_carrier_frequency(
+                intermediate_frequency,
+                carrier_doppler
+            )
+            code_frequency = get_current_code_frequency(system, code_doppler)
+        end
+        NVTX.@range "Downconvert & Correlate" begin
+            correlator = downconvert_and_correlate!(
+                system,
+                signal,
+                correlator,
+                code_replica,
+                code_phase,
+                carrier_replica,
+                carrier_phase,
+                downconverted_signal,
+                code_frequency,
+                correlator_sample_shifts,
+                carrier_frequency,
+                sampling_frequency,
+                signal_start_sample,
+                num_samples_left,
+                prn
+            )
+        end
         integrated_samples += num_samples_left
         carrier_phase = update_carrier_phase(
             num_samples_left,
@@ -148,30 +152,20 @@ function track(
                 early_late_index_shift,
                 code_frequency / sampling_frequency
             )
-            carrier_freq_update, carrier_loop_filter = filter_loop(
-                carrier_loop_filter,
-                pll_discriminator,
-                integration_time,
-                carrier_loop_filter_bandwidth
-            )
-            code_freq_update, code_loop_filter = filter_loop(
-                code_loop_filter,
-                dll_discriminator,
-                integration_time,
-                code_loop_filter_bandwidth
-            )
-            carrier_doppler, code_doppler = aid_dopplers(
-                system,
-                init_carrier_doppler,
-                init_code_doppler,
-                carrier_freq_update,
-                code_freq_update,
-                velocity_aiding
-            )
-            cn0_estimator = update(
-                cn0_estimator,
-                get_prompt(filtered_correlator, correlator_sample_shifts)
-            )
+            NVTX.@range "PLL & DLL" begin
+                carrier_doppler, code_doppler = aid_dopplers(
+                    system,
+                    init_carrier_doppler,
+                    init_code_doppler,
+                    carrier_freq_update,
+                    code_freq_update,
+                    velocity_aiding
+                )
+                cn0_estimator = update(
+                    cn0_estimator,
+                    get_prompt(filtered_correlator, correlator_sample_shifts)
+                )
+            end
             bit_buffer, prompt_accumulator = buffer(
                 system,
                 bit_buffer,
