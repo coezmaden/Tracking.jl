@@ -117,7 +117,7 @@ function downconvert_and_correlate_kernel_wrapper(
     num_samples_left,
     prn
 )   
-    NVTX.@range "D&C Kernel+wrapper" begin
+    NVTX.@range "kernel params" begin
         num_corrs = length(correlator_sample_shifts)
         num_ants = size(signal, 2)
         num_samples = size(signal, 1)
@@ -130,28 +130,28 @@ function downconvert_and_correlate_kernel_wrapper(
         res_re = CUDA.zeros(Float32, blocks, block_dim_y, block_dim_z)
         res_im = CUDA.zeros(Float32, blocks, block_dim_y, block_dim_z)
         shmem_size = sizeof(ComplexF32)*block_dim_x*block_dim_y*block_dim_z
-        NVTX.@range "D&C Kernel" begin
-            @cuda threads=threads blocks=blocks shmem=shmem_size downconvert_and_correlate_kernel(
-            res_re, 
-            res_im, 
-            signal.re, 
-            signal.im,
-            system.codes,
-            Float32(code_frequency),
-            correlator_sample_shifts,
-            Float32(carrier_frequency),
-            Float32(sampling_frequency),
-            Float32(code_phase),
-            Float32(carrier_phase),
-            size(system.codes, 1),
-            prn,
-            num_samples, 
-            num_ants,
-            num_corrs
-        )
-        end
-        NVTX.@range "D%C Sum" begin
-            return sum(res_re .+ 1im*res_im, dims=1)
-        end
+    end
+    NVTX.@range "downconvert_and_correlate_kernel" begin
+        @cuda threads=threads blocks=blocks shmem=shmem_size downconvert_and_correlate_kernel(
+        res_re, 
+        res_im, 
+        signal.re, 
+        signal.im,
+        system.codes,
+        Float32(code_frequency),
+        correlator_sample_shifts,
+        Float32(carrier_frequency),
+        Float32(sampling_frequency),
+        Float32(code_phase),
+        Float32(carrier_phase),
+        size(system.codes, 1),
+        prn,
+        num_samples, 
+        num_ants,
+        num_corrs
+    )
+    end
+    NVTX.@range "sum" begin
+        return sum(res_re .+ 1im*res_im, dims=1)
     end
 end
