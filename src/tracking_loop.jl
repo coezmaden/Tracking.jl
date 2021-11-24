@@ -140,19 +140,31 @@ function track(
             valid_correlator_carrier_phase = carrier_phase
             valid_correlator_carrier_frequency = carrier_frequency
             filtered_correlator = filter(post_corr_filter, correlator)
-            pll_discriminator = pll_disc(
-                system,
-                filtered_correlator,
-                correlator_sample_shifts
-            )
-            dll_discriminator = dll_disc(
-                system,
-                filtered_correlator,
-                correlator_sample_shifts,
-                early_late_index_shift,
-                code_frequency / sampling_frequency
-            )
-            NVTX.@range "PLL & DLL" begin
+            NVTX.@range "PLL, DLL, Aid dopplers, Bit buffer" begin
+                pll_discriminator = pll_disc(
+                    system,
+                    filtered_correlator,
+                    correlator_sample_shifts
+                )
+                dll_discriminator = dll_disc(
+                    system,
+                    filtered_correlator,
+                    correlator_sample_shifts,
+                    early_late_index_shift,
+                    code_frequency / sampling_frequency
+                )
+                carrier_freq_update, carrier_loop_filter = filter_loop(
+                    carrier_loop_filter,
+                    pll_discriminator,
+                    integration_time,
+                    carrier_loop_filter_bandwidth
+                )
+                code_freq_update, code_loop_filter = filter_loop(
+                    code_loop_filter,
+                    dll_discriminator,
+                    integration_time,
+                    code_loop_filter_bandwidth
+                )
                 carrier_doppler, code_doppler = aid_dopplers(
                     system,
                     init_carrier_doppler,
@@ -165,22 +177,22 @@ function track(
                     cn0_estimator,
                     get_prompt(filtered_correlator, correlator_sample_shifts)
                 )
+                bit_buffer, prompt_accumulator = buffer(
+                    system,
+                    bit_buffer,
+                    prompt_accumulator,
+                    found(sc_bit_detector),
+                    prev_code_phase,
+                    code_phase,
+                    max_integration_time,
+                    get_prompt(filtered_correlator, correlator_sample_shifts)
+                )
+                sc_bit_detector = find(
+                    system,
+                    sc_bit_detector,
+                    get_prompt(filtered_correlator, correlator_sample_shifts)
+                )
             end
-            bit_buffer, prompt_accumulator = buffer(
-                system,
-                bit_buffer,
-                prompt_accumulator,
-                found(sc_bit_detector),
-                prev_code_phase,
-                code_phase,
-                max_integration_time,
-                get_prompt(filtered_correlator, correlator_sample_shifts)
-            )
-            sc_bit_detector = find(
-                system,
-                sc_bit_detector,
-                get_prompt(filtered_correlator, correlator_sample_shifts)
-            )
             correlator = zero(correlator)
             integrated_samples = 0
         end
