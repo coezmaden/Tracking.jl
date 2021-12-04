@@ -216,25 +216,25 @@ function track(
     end
     NVTX.@range "Next TrackingState" begin
         next_state = TrackingState{S, C, CALF, COLF, CN, DS, CAR, COR}(
-        prn,
-        system,
-        init_carrier_doppler,
-        init_code_doppler,
-        carrier_doppler,
-        code_doppler,
-        carrier_phase,
-        code_phase,
-        correlator,
-        carrier_loop_filter,
-        code_loop_filter,
-        sc_bit_detector,
-        integrated_samples,
-        prompt_accumulator,
-        cn0_estimator,
-        downconverted_signal,
-        carrier_replica,
-        code_replica
-    )
+            prn,
+            system,
+            init_carrier_doppler,
+            init_code_doppler,
+            carrier_doppler,
+            code_doppler,
+            carrier_phase,
+            code_phase,
+            correlator,
+            carrier_loop_filter,
+            code_loop_filter,
+            sc_bit_detector,
+            integrated_samples,
+            prompt_accumulator,
+            cn0_estimator,
+            downconverted_signal,
+            carrier_replica,
+            code_replica
+        )
     end
     NVTX.@range "estimate_cn0" begin
         estimated_cn0 = estimate_cn0(cn0_estimator, max_integration_time)
