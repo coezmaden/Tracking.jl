@@ -46,21 +46,26 @@ function gen_carrier_replica_kernel!(
     return nothing
 end
 
-#= function gen_code_replica_kernel!(
+function gen_code_replica_kernel!(
     code_replica,
     codes,
     code_frequency,
-    correlator_sample_shifts,
     sampling_frequency,
-    code_phase,
-    code_length,
+    start_code_phase,
     prn,
     num_samples,
-    num_ants,
-    num_corrs
-)
+    num_of_shifts,
+    code_length
+)   
+    # thread_idx goes from 1:2502
+    # sample_idx converted to -1:2500 -> [-1 0 +1]
+    thread_idx = 1 + ((blockIdx().x - 1) * blockDim().x + (threadIdx().x - 1))
+    if thread_idx <= num_samples 
+        code_replica[thread_idx] = codes[1+mod(floor(Int32, code_frequency/sampling_frequency * (thread_idx - num_of_shifts) + start_code_phase), code_length), prn]
+    end
     
-end =#
+    return nothing   
+end
 
 # CUDA Kernel 
 function downconvert_and_correlate_kernel(
@@ -68,6 +73,8 @@ function downconvert_and_correlate_kernel(
     res_im,
     signal_re,
     signal_im,
+    carrier_re,
+    carrier_im,
     codes,
     code_frequency,
     correlator_sample_shifts,
