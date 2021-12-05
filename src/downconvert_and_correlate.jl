@@ -30,26 +30,6 @@ function downconvert_and_correlate(
     C(map(+, get_accumulators(correlator), accumulators_result))
 end
 =#
-function gen_carrier_replica_wrapper!(
-    carrier_replica_re,
-    carrier_replica_im,
-    carrier_frequency,
-    sampling_frequency,
-    carrier_phase,
-    num_samples
-)
-    threads = 1024
-    blocks = cld(num_samples, threads)
-    @cuda threads=threads blocks=blocks Tracking.gen_carrier_replica_kernel!(
-        carrier_replica_re, 
-        carrier_replica_im, 
-        sampling_frequency, 
-        carrier_frequency, 
-        carrier_phase, 
-        num_samples
-    )
-    return complex.(carrier_replica_re, carrier_replica_im)
-end
 
 function gen_carrier_replica_kernel!(
     carrier_replica_re,
