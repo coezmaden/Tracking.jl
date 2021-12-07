@@ -78,11 +78,11 @@ function downconvert_and_correlate_kernel(
     code,
     downconverted_signal_re,
     downconverted_signal_im,
-    correlator_sample_shifts,
+    correlator_sample_shifts::SVector,
     num_samples,
-    num_ants,
+    num_ants,#::NumAnts{N}
     num_corrs
-)   
+)#  where N
     cache = @cuDynamicSharedMem(Float32, (2 * blockDim().x, num_ants, num_corrs))   
     sample_idx   = 1 + ((blockIdx().x - 1) * blockDim().x + (threadIdx().x - 1))
     antenna_idx  = 1 + ((blockIdx().y - 1) * blockDim().y + (threadIdx().y - 1))
@@ -93,13 +93,16 @@ function downconvert_and_correlate_kernel(
 
     if sample_idx <= num_samples && antenna_idx <= num_ants
         # downconvert with the conjugate of the carrier
-        downconverted_signal_re[sample_idx] = signal_re[sample_idx] * carrier_re[sample_idx] + signal_im[sample_idx] * carrier_im[sample_idx]
-        downconverted_signal_im[sample_idx] = signal_im[sample_idx] * carrier_re[sample_idx] - signal_re[sample_idx] * carrier_im[sample_idx]
+        #= for i = 1:N
+
+        end =#
+        downconverted_signal_re[sample_idx, antenna_idx] = signal_re[sample_idx, antenna_idx] * carrier_re[sample_idx] + signal_im[sample_idx, antenna_idx] * carrier_im[sample_idx]
+        downconverted_signal_im[sample_idx, antenna_idx] = signal_im[sample_idx, antenna_idx] * carrier_re[sample_idx] - signal_re[sample_idx, antenna_idx] * carrier_im[sample_idx]
         
         # multiply elementwise with the code
         for (corr_idx, sample_shift) ∈ enumerate(correlator_sample_shifts)
-            accum_re += code[sample_idx - 1 + 2 + sample_shift] * downconverted_signal_re[sample_idx]
-            accum_im += code[sample_idx - 1 + 2 + sample_shift] * downconverted_signal_im[sample_idx]
+            accum_re += code[sample_idx - 1 + 2 + sample_shift] * downconverted_signal_re[sample_idx, antenna_idx]
+            accum_im += code[sample_idx - 1 + 2 + sample_shift] * downconverted_signal_im[sample_idx, antenna_idx]
 
             cache[1 + cache_index + 0 * iq_offset, antenna_idx, corr_idx] = accum_re
             cache[1 + cache_index + 1 * iq_offset, antenna_idx, corr_idx] = accum_im
@@ -113,16 +116,20 @@ function downconvert_and_correlate_kernel(
     i::Int = blockDim().x ÷ 2
     @inbounds while i != 0
         if cache_index < i
-            cache[1 + cache_index + 0 * iq_offset, antenna_idx] += cache[1 + cache_index + 0 * iq_offset + i, antenna_idx]
-            cache[1 + cache_index + 1 * iq_offset, antenna_idx] += cache[1 + cache_index + 1 * iq_offset + i, antenna_idx]
+            for (corr_idx, _) ∈ enumerate(correlator_sample_shifts)
+                cache[1 + cache_index + 0 * iq_offset, antenna_idx, corr_idx] += cache[1 + cache_index + 0 * iq_offset + i, antenna_idx, corr_idx]
+                cache[1 + cache_index + 1 * iq_offset, antenna_idx, corr_idx] += cache[1 + cache_index + 1 * iq_offset + i, antenna_idx, corr_idx]
+            end
         end
         sync_threads()
         i ÷= 2
     end
     
     if (threadIdx().x - 1) == 0
-        res_re[blockIdx().x, antenna_idx] += cache[1 + 0 * iq_offset, antenna_idx]
-        res_im[blockIdx().x, antenna_idx] += cache[1 + 1 * iq_offset, antenna_idx]
+        for (corr_idx, _) in enumerate(correlator_sample_shifts) 
+            res_re[blockIdx().x, antenna_idx, corr_idx] += cache[1 + 0 * iq_offset, antenna_idx, corr_idx]
+            res_im[blockIdx().x, antenna_idx, corr_idx] += cache[1 + 1 * iq_offset, antenna_idx, corr_idx]
+        end
     end
     return nothing
 end
@@ -141,11 +148,9 @@ function downconvert_and_correlate_kernel_wrapper(
 )   
     NVTX.@range "kernel params" begin
         # keep num_ants in seperate dimensions, truncate num_samples accordingly to fit
-        block_dim_y = num_ants
-        block_dim_x = prevpow(2, 1024 ÷ block_dim_y)
-        threads = (block_dim_x, block_dim_y)
-        blocks = cld(num_samples, block_dim_x)
-        shmem_size = sizeof(ComplexF32)*block_dim_x*block_dim_y*num_corrs
+        threads = (512, num_ants)
+        blocks = cld(num_samples, 512)
+        shmem_size = sizeof(ComplexF32)*512*num_ants*num_corrs
     end
     NVTX.@range "downconvert_and_correlate_kernel" begin
         @cuda threads=threads blocks=blocks shmem=shmem_size downconvert_and_correlate_kernel(
