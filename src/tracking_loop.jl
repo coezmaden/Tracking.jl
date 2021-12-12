@@ -20,7 +20,8 @@ Track the signal `signal` based on the current tracking `state`, the sampling fr
 function track(
         signal,
         state::TrackingState{S, C, CALF, COLF, CN, DS, CAR, COR},
-        sampling_frequency;
+        sampling_frequency,
+        algorithm::Algorithm{ABC};
         post_corr_filter = get_default_post_corr_filter(get_correlator(state)),
         intermediate_frequency = 0.0Hz,
         max_integration_time::typeof(1ms) = 1ms,
@@ -40,7 +41,8 @@ function track(
     CN <: AbstractCN0Estimator,
     DS,
     CAR,
-    COR
+    COR,
+    ABC
 }
     prn = get_prn(state)
     system = get_system(state)
@@ -72,6 +74,7 @@ function track(
     prompt_accumulator = get_prompt_accumulator(state)
     integrated_samples = get_integrated_samples(state)
     cn0_estimator = get_cn0_estimator(state)
+    cuda_config = get_cuda_config(state)
     signal_start_sample = 1
     bit_buffer = BitBuffer()
     valid_correlator = zero(correlator)
@@ -118,7 +121,9 @@ function track(
                 sampling_frequency,
                 signal_start_sample,
                 num_samples_left,
-                prn
+                prn,
+                algorithm,
+                cuda_config
             )
         end
         integrated_samples += num_samples_left
@@ -267,7 +272,9 @@ function downconvert_and_correlate!(
     sampling_frequency,
     signal_start_sample,
     num_samples_left,
-    prn
+    prn,
+    algorithm,
+    cuda_config
 )   
     NVTX.@range "gen_code_replica!" begin
         gen_code_replica!(
@@ -329,26 +336,48 @@ function downconvert_and_correlate!(
     sampling_frequency,
     signal_start_sample,
     num_samples_left,
-    prn
+    prn,
+    algorithm::Algorithm{2},
+    cuda_config
 ) where {C <: CuMatrix, T <: AbstractCorrelator}
-    NVTX.@range "downconvert_and_correlate_kernel_wrapper" begin
-        accumulator_result = downconvert_and_correlate_kernel_wrapper(
-            system,
-            view(signal, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
-            correlator,
-            code_phase,
-            carrier_phase,
+    NVTX.@range "gen_code_replica_kernel!" begin
+        @cuda threads=cuda_config.threads_per_block blocks=cld(num_samples_left, cuda_config.threads_per_block) gen_code_replica_kernel!(
+            view(code_replica),
+            system.codes,
             code_frequency,
+            sampling_frequency,
+            start_code_phase,
+            prn,
+            num_samples,
+            num_of_shifts,
+            code_length
+        ) 
+    end
+    NVTX.@range "downconvert_and_correlate_kernel" begin
+        @cuda threads=cuda_config.threads_per_block÷2 blocks=cld(num_samples_left, cuda_config.threads_per_block÷2) shmem=cuda_config.shmem_size downconvert_and_correlate_kernel!(
+            cuda_config.partial_sum.re,
+            cuda_config.partial_sum.im,
+            view(carrier_replica.re, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            view(carrier_replica.im, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            view(downconverted_signal.re, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            view(downconverted_signal.im, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            view(signal.re, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            view(signal.im, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
+            code_replica,
             correlator_sample_shifts,
             carrier_frequency,
             sampling_frequency,
-            signal_start_sample,
-            num_samples_left,
-            prn
+            carrier_phase,
+            num_samples,
+            NumAnts(num_ants),
+            algorithm
         )
     end
+    NVTX.@range "cuda_partial_sum_reduction" begin
+        cuda_reduce_partial_sum(partial_sum)
+    end
     NVTX.@range "map(+, get_accumulators(correlator), <res>)" begin
-        return T(map(+, get_accumulators(correlator), eachcol(Array(accumulator_result[1,:,:]))))
+        #return T(map(+, get_accumulators(correlator), eachcol(Array(accumulator_result[1,:,:]))))
     end
 end
 
@@ -370,26 +399,29 @@ function downconvert_and_correlate!(
     num_samples_left,
     prn
 ) where {C <: CuMatrix, T <: AbstractCorrelator}
-    NVTX.@range "downconvert_and_correlate_kernel_wrapper" begin
-        accumulator_result = downconvert_and_correlate_kernel_wrapper(
-            system,
-            view(signal, signal_start_sample:signal_start_sample - 1 + num_samples_left),
-            correlator,
-            code_phase,
-            carrier_phase,
-            code_frequency,
+    #= NVTX.@range "downconvert_and_correlate_kernel_wrapper" begin
+        @cuda downconvert_and_correlate_kernel!(
+            partial_sum.re,
+            partial_sum.im,
+            carrier_replica.re,
+            carrier_replica.im,
+            downconverted_signal.re,
+            downconverted_signal.im,
+            signal_gpu.re,
+            signal_gpu.im,
+            code_replica,
             correlator_sample_shifts,
             carrier_frequency,
             sampling_frequency,
-            signal_start_sample,
-            num_samples_left,
-            prn
+            carrier_phase,
+            num_samples,
+            NumAnts(num_ants)
         )
     end
     addition(a,b) = a + first(b)
     NVTX.@range "map(+, get_accumulators(correlator), <res>)" begin
         return T(map(addition, get_accumulators(correlator), eachcol(Array(accumulator_result[1,:,:]))))
-    end
+    end =#
 end
 
 function choose(replica::CarrierReplicaCPU, signal::AbstractArray{Complex{Float64}})
@@ -404,7 +436,7 @@ end
 function choose(replica::DownconvertedSignalCPU, signal::AbstractArray{Complex{T}}) where T <: Number
     replica.downconverted_signal_f32
 end
-function choose(replica::Nothing, signal::AbstractArray)
+function choose(replica::StructArray{Complex{Float32}, 1, NamedTuple{(:re, :im), Tuple{CuArray{Float32, 1, CUDA.Mem.DeviceBuffer}, CuArray{Float32, 1, CUDA.Mem.DeviceBuffer}}}, Int64}, signal::AbstractArray)
     nothing
 end
 
@@ -540,8 +572,8 @@ function resize!(ds::DownconvertedSignalCPU, b::Integer, signal::AbstractMatrix{
 end
 
 # No need for resizing when dealing with GPU signals
-function resize!(ds::Nothing, b::Integer, signal::AbstractArray)
-    return ds
+function resize!(s::StructArray, b::Integer, signal::AbstractArray)
+    return s
 end
 # No need for resizing the GPU GNSS codes
 function resize!(codes::Nothing, b::Integer)

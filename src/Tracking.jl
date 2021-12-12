@@ -36,6 +36,7 @@ module Tracking
         get_state,
         get_system,
         get_cn0,
+        get_cuda_config,
         track,
         TrackingState,
         NumAnts,
@@ -47,7 +48,8 @@ module Tracking
         EarlyPromptLateCorrelator,
         #VeryEarlyPromptLateCorrelator,
         SecondaryCodeOrBitDetector,
-        GainControlledSignal
+        GainControlledSignal,
+        CUDAConfig
 
     struct NumAnts{x}
     end
@@ -59,6 +61,12 @@ module Tracking
 
     NumAccumulators(x) = NumAccumulators{x}()
 
+    struct Algorithm{x}
+    end 
+
+    Algorithm(x) = Algorithm{x}()
+
+    include("cuda.jl")
     include("code_replica.jl")
     include("carrier_replica.jl")
     include("downconvert.jl")

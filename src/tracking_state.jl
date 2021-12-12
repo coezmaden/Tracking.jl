@@ -50,6 +50,22 @@ function DownconvertedSignalCPU(num_ants::NumAnts{N}) where N
     )
 end
 
+function cuda_gen_blank_code_replica(num_samples::Int, num_corrs::Int)
+    CuArray{Float32}(undef, num_samples + num_corrs - 1)
+end
+
+function cuda_gen_blank_carrier_replica(num_samples::Int)
+    StructArray{ComplexF32}((CuArray{Float32}(undef, num_samples), CuArray{Float32}(undef, num_samples)))
+end
+
+function cuda_gen_blank_downconverted_signal(num_samples::Int, num_ants::NumAnts{1})
+    StructArray{ComplexF32}((CuArray{Float32}(undef, num_samples), CuArray{Float32}(undef, num_samples)))
+end
+
+function cuda_gen_blank_downconverted_signal(num_samples::Int, num_ants::NumAnts{N}) where N
+    StructArray{ComplexF32}((CuArray{Float32}(undef, (num_samples, N)), CuArray{Float32}(undef, (num_samples, N))))
+end
+
 """
 $(SIGNATURES)
 
@@ -61,9 +77,10 @@ struct TrackingState{
         CALF <: AbstractLoopFilter,
         COLF <: AbstractLoopFilter,
         CN <: AbstractCN0Estimator,
-        DS <: Union{DownconvertedSignalCPU, Nothing},
-        CAR <: Union{CarrierReplicaCPU, Nothing},
-        COR <: Union{Vector{Int8}, Nothing}
+        DS <: Union{DownconvertedSignalCPU, StructArray},
+        CAR <: Union{CarrierReplicaCPU, StructArray},
+        COR <: Union{Vector{Int8}, Nothing},
+        CUDA <: Union{CUDAConfig, Nothing}
     }
     prn::Int
     system::S
@@ -83,6 +100,7 @@ struct TrackingState{
     downconverted_signal::DS
     carrier::CAR
     code::COR
+    cuda_config::CUDA
 end
 
 """ 
@@ -116,7 +134,8 @@ function TrackingState(
     integrated_samples = 0,
     prompt_accumulator = zero(ComplexF64),
     cn0_estimator::CN = MomentsCN0Estimator(20),
-    num_samples = 0
+    num_samples = 0,
+    cuda_config = nothing
 ) where {
     T <: AbstractMatrix,
     S <: AbstractGNSS{T},
@@ -153,7 +172,8 @@ function TrackingState(
         cn0_estimator,
         downconverted_signal,
         carrier,
-        code
+        code,
+        cuda_config
     )
 end
 
@@ -188,11 +208,11 @@ function TrackingState(
     else
         code_phase = mod(code_phase, get_code_length(system))
     end
-    downconverted_signal = nothing
-    carrier = nothing
-    code = nothing
-
-    TrackingState{S, C, CALF, COLF, CN, Nothing, Nothing, Nothing}(
+    downconverted_signal = cuda_gen_blank_downconverted_signal(num_samples, num_ants)
+    carrier = cuda_gen_blank_carrier_replica(num_samples)
+    code = cuda_gen_blank_code_replica(num_samples, correlator)
+    cuda_config = CUDAConfig(num_samples, num_ants, get_num_accumulators(correlator))
+    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal), typeof(carrier), typeof(code)}(
         prn,
         system,
         carrier_doppler,
@@ -210,7 +230,8 @@ function TrackingState(
         cn0_estimator,
         downconverted_signal,
         carrier,
-        code
+        code,
+        cuda_config
     )
 end
 
@@ -232,3 +253,4 @@ end
 @inline get_carrier(state::TrackingState) = state.carrier
 @inline get_code(state::TrackingState) = state.code
 @inline get_prn(state::TrackingState) = state.prn
+@inline get_cuda_config(state::TrackingState) = state.cuda_config
