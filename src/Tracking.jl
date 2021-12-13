@@ -61,11 +61,6 @@ module Tracking
 
     NumAccumulators(x) = NumAccumulators{x}()
 
-    struct Algorithm{x}
-    end 
-
-    Algorithm(x) = Algorithm{x}()
-
     include("cuda.jl")
     include("code_replica.jl")
     include("carrier_replica.jl")

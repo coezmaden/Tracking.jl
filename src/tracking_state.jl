@@ -79,7 +79,7 @@ struct TrackingState{
         CN <: AbstractCN0Estimator,
         DS <: Union{DownconvertedSignalCPU, StructArray},
         CAR <: Union{CarrierReplicaCPU, StructArray},
-        COR <: Union{Vector{Int8}, Nothing},
+        COR <: Union{Vector{Int8}, CuArray},
         CUDA <: Union{CUDAConfig, Nothing}
     }
     prn::Int
@@ -154,7 +154,7 @@ function TrackingState(
     carrier = CarrierReplicaCPU()
     code = Vector{Int8}(undef, 0)
 
-    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal), typeof(carrier), typeof(code)}(
+    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal), typeof(carrier), typeof(code), typeof(cuda_config)}(
         prn,
         system,
         carrier_doppler,
@@ -210,9 +210,9 @@ function TrackingState(
     end
     downconverted_signal = cuda_gen_blank_downconverted_signal(num_samples, num_ants)
     carrier = cuda_gen_blank_carrier_replica(num_samples)
-    code = cuda_gen_blank_code_replica(num_samples, correlator)
+    code = cuda_gen_blank_code_replica(num_samples, get_num_accumulators(correlator))
     cuda_config = CUDAConfig(num_samples, num_ants, get_num_accumulators(correlator))
-    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal), typeof(carrier), typeof(code)}(
+    TrackingState{S, C, CALF, COLF, CN, typeof(downconverted_signal), typeof(carrier), typeof(code), typeof(cuda_config)}(
         prn,
         system,
         carrier_doppler,

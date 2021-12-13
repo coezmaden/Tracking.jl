@@ -60,7 +60,7 @@ function gen_code_replica_kernel!(
     # thread_idx goes from 1:2502
     # sample_idx converted to -1:2500 -> [-1 0 +1]
     thread_idx = 1 + ((blockIdx().x - 1) * blockDim().x + (threadIdx().x - 1))
-    if thread_idx <= num_samples 
+    if thread_idx <= num_samples + num_of_shifts
         @inbounds code_replica[thread_idx] = codes[1+mod(floor(Int32, code_frequency/sampling_frequency * (thread_idx - num_of_shifts) + start_code_phase), code_length), prn]
     end
     
@@ -83,8 +83,7 @@ function downconvert_and_correlate_kernel!(
     sampling_frequency,
     carrier_phase,
     num_samples::Int,
-    num_ants::NumAnts{NANT},
-    algorithm::Algorithm{2}
+    num_ants::NumAnts{NANT}
 )  where {NCOR, NANT}
     cache = @cuDynamicSharedMem(Float32, (2 * blockDim().x, NANT, NCOR))
     sample_idx   = 1 + ((blockIdx().x - 1) * blockDim().x + (threadIdx().x - 1))

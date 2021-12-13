@@ -13,7 +13,7 @@ function CUDAConfig(
     threads_per_block = CUDA.attribute(device(), CUDA.DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
     blocks_per_grid = cld(num_samples, threads_per_block)
     CUDAConfig(
-        StructArray{ComplexF32}((CUDA.zeros(Float32, (blocks_per_grid, NANT, num_corrs)),CUDA.zeros(Float32, (blocks_per_grid, NANT, num_corrs)))),
+        StructArray{ComplexF32}((CUDA.zeros(Float32, (cld(num_samples, 512), NANT, num_corrs)),CUDA.zeros(Float32, (cld(num_samples, 512), NANT, num_corrs)))),
         threads_per_block,
         blocks_per_grid,
         sizeof(ComplexF32)*NANT*num_corrs

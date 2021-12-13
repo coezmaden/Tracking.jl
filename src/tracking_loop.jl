@@ -20,8 +20,7 @@ Track the signal `signal` based on the current tracking `state`, the sampling fr
 function track(
         signal,
         state::TrackingState{S, C, CALF, COLF, CN, DS, CAR, COR},
-        sampling_frequency,
-        algorithm::Algorithm{ABC};
+        sampling_frequency;
         post_corr_filter = get_default_post_corr_filter(get_correlator(state)),
         intermediate_frequency = 0.0Hz,
         max_integration_time::typeof(1ms) = 1ms,
@@ -32,7 +31,7 @@ function track(
             correlator_sample_shifts, get_correlator(state), sampling_frequency, 0.5),
         carrier_loop_filter_bandwidth = 18Hz,
         code_loop_filter_bandwidth = 1Hz,
-        velocity_aiding = 0Hz,
+        velocity_aiding = 0Hz
 ) where {
     S <: AbstractGNSS,
     C <: AbstractCorrelator,
@@ -75,6 +74,7 @@ function track(
     integrated_samples = get_integrated_samples(state)
     cn0_estimator = get_cn0_estimator(state)
     cuda_config = get_cuda_config(state)
+    partial_sum = get_cuda_config(state).partial_sum
     signal_start_sample = 1
     bit_buffer = BitBuffer()
     valid_correlator = zero(correlator)
@@ -122,8 +122,8 @@ function track(
                 signal_start_sample,
                 num_samples_left,
                 prn,
-                algorithm,
-                cuda_config
+                cuda_config,
+                partial_sum
             )
         end
         integrated_samples += num_samples_left
@@ -273,8 +273,8 @@ function downconvert_and_correlate!(
     signal_start_sample,
     num_samples_left,
     prn,
-    algorithm,
-    cuda_config
+    cuda_config,
+    partial_sum
 )   
     NVTX.@range "gen_code_replica!" begin
         gen_code_replica!(
@@ -337,26 +337,26 @@ function downconvert_and_correlate!(
     signal_start_sample,
     num_samples_left,
     prn,
-    algorithm::Algorithm{2},
-    cuda_config
+    cuda_config,
+    partial_sum
 ) where {C <: CuMatrix, T <: AbstractCorrelator}
     NVTX.@range "gen_code_replica_kernel!" begin
-        @cuda threads=cuda_config.threads_per_block blocks=cld(num_samples_left, cuda_config.threads_per_block) gen_code_replica_kernel!(
-            view(code_replica),
+        @cuda threads=1024 blocks=cld(num_samples_left, 1024) gen_code_replica_kernel!(
+            view(code_replica, signal_start_sample:signal_start_sample - 1 + num_samples_left + length(correlator_sample_shifts) - 1,:),
             system.codes,
             code_frequency,
             sampling_frequency,
-            start_code_phase,
+            code_phase,
             prn,
-            num_samples,
-            num_of_shifts,
-            code_length
+            num_samples_left,
+            length(correlator_sample_shifts) - 1,
+            get_code_length(system)
         ) 
     end
     NVTX.@range "downconvert_and_correlate_kernel" begin
-        @cuda threads=cuda_config.threads_per_block÷2 blocks=cld(num_samples_left, cuda_config.threads_per_block÷2) shmem=cuda_config.shmem_size downconvert_and_correlate_kernel!(
-            cuda_config.partial_sum.re,
-            cuda_config.partial_sum.im,
+        @cuda threads=512 blocks=cld(num_samples_left, 512) shmem=sizeof(ComplexF32)*2*cld(num_samples_left, 512)*get_num_ants(correlator)*get_num_accumulators(correlator) downconvert_and_correlate_kernel!(
+            partial_sum.re,
+            partial_sum.im,
             view(carrier_replica.re, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
             view(carrier_replica.im, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
             view(downconverted_signal.re, signal_start_sample:signal_start_sample - 1 + num_samples_left,:),
@@ -368,16 +368,12 @@ function downconvert_and_correlate!(
             carrier_frequency,
             sampling_frequency,
             carrier_phase,
-            num_samples,
-            NumAnts(num_ants),
-            algorithm
+            num_samples_left,
+            NumAnts(get_num_ants(correlator))
         )
     end
-    NVTX.@range "cuda_partial_sum_reduction" begin
-        cuda_reduce_partial_sum(partial_sum)
-    end
-    NVTX.@range "map(+, get_accumulators(correlator), <res>)" begin
-        #return T(map(+, get_accumulators(correlator), eachcol(Array(accumulator_result[1,:,:]))))
+    NVTX.@range "map(+, get_accumulators(correlator), sum(partial_sum))" begin
+        return T(map(+, get_accumulators(correlator), eachcol(Array(cuda_reduce_partial_sum(partial_sum)[1,:,:]))))
     end
 end
 
