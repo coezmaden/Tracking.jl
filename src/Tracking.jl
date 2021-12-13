@@ -49,7 +49,8 @@ module Tracking
         #VeryEarlyPromptLateCorrelator,
         SecondaryCodeOrBitDetector,
         GainControlledSignal,
-        CUDAConfig
+        CUDAConfig,
+        downconvert_and_correlate_2
 
     struct NumAnts{x}
     end
