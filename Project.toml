@@ -1,0 +1,13 @@
+name = "OptimizingParallelReduction"
+uuid = "a2a3fbb4-c5e3-4d26-88cc-bda3008b739e"
+authors = ["Can Ozmaden <git@canozmaden.com> and contributors"]
+version = "0.1.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[compat]
+julia = "1.6"
+
+[targets]
+test = ["Test"]
