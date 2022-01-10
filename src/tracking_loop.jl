@@ -122,8 +122,6 @@ function track(
                 signal_start_sample,
                 num_samples_left,
                 prn,
-                cuda_config,
-                partial_sum
             )
         end
         integrated_samples += num_samples_left
@@ -272,9 +270,7 @@ function downconvert_and_correlate!(
     sampling_frequency,
     signal_start_sample,
     num_samples_left,
-    prn,
-    cuda_config,
-    partial_sum
+    prn
 )   
     NVTX.@range "gen_code_replica!" begin
         gen_code_replica!(
@@ -336,9 +332,7 @@ function downconvert_and_correlate!(
     sampling_frequency,
     signal_start_sample,
     num_samples_left,
-    prn,
-    cuda_config,
-    partial_sum
+    prn
 ) where {C <: CuMatrix, T <: AbstractCorrelator}
     NVTX.@range "gen_code_replica_kernel!" begin
         @cuda threads=1024 blocks=cld(num_samples_left, 1024) gen_code_replica_kernel!(

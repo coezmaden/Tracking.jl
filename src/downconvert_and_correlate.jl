@@ -68,7 +68,7 @@ function gen_code_replica_kernel!(
 end
 
 # CUDA Kernel 
-function downconvert_and_correlate_kernel!(
+function downconvert_and_correlate_kernel_2!(
     partial_sum_re,
     partial_sum_im,
     carrier_replica_re,
