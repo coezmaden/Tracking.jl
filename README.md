@@ -1,5 +1,6 @@
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaGNSS.github.io/Tracking.jl/stable)
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaGNSS.github.io/Tracking.jl/dev)
+[![DOI](https://zenodo.org/badge/171484097.svg)](https://zenodo.org/badge/latestdoi/171484097)
 [![Build Status](https://travis-ci.org/JuliaGNSS/Tracking.jl.svg?branch=master)](https://travis-ci.org/JuliaGNSS/Tracking.jl)
 [![Coverage Status](https://coveralls.io/repos/github/JuliaGNSS/Tracking.jl/badge.svg?branch=master)](https://coveralls.io/github/JuliaGNSS/Tracking.jl?branch=master)
 
@@ -42,8 +43,8 @@ next_results = track(next_signal, get_state(results), sampling_frequency)
 If you'd like to track several signals at once (e.g. in the case of phased antenna arrays), you will have to specify the optional parameter `num_ants::NumAnts{N}` and pass a beamforming function to the `track` function:
 
 ```julia
-state = TrackingState(GPSL1, carrier_doppler, code_phase, num_ants = NumAnts(4)) # 4 antenna channels
-results = track(signal, state, prn, sampling_frequency, post_corr_filter = x -> x[1]) # Post corr filter is optional
+state = TrackingState(prn, gpsl1, carrier_doppler, code_phase, num_ants = NumAnts(4)) # 4 antenna channels
+results = track(signal, state, sampling_frequency, post_corr_filter = x -> x[1]) # Post corr filter is optional
 ```
 
 ### Usage with `CUDA.jl`
